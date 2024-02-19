@@ -16,6 +16,12 @@ RUN apt-get update && apt-get install -y \
     unzip \
     libpq-dev
 
+# nginx
+RUN apt-get install -y nginx
+
+# configure nginx
+COPY ./docker/nginx/default /etc/nginx/sites-available/default
+
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
