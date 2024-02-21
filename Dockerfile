@@ -1,23 +1,47 @@
-FROM composer:2.7 as build
-WORKDIR /app
-COPY . /app
-RUN composer install
+# Use PHP 8.2 FPM Alpine as base image
+FROM php:8.2-fpm-alpine
 
-# php 8.2
-FROM php:8.2-apache
-RUN docker-php-ext-install pdo pdo_mysql
+# Set working directory
+WORKDIR /var/www/html
 
-EXPOSE 8080
-COPY --from=build /app /var/www/
-COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
-COPY .env.example /var/www/.env
+# Install dependencies
+RUN apk add --no-cache \
+    bash \
+    curl \
+    wget \
+    nginx \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    libwebp-dev \
+    zlib-dev \
+    libzip-dev \
+    postgresql-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install -j$(nproc) \
+        gd \
+        pdo \
+        pdo_pgsql \
+        zip \
+    && apk del libpng-dev libjpeg-turbo-dev libwebp-dev zlib-dev libzip-dev
 
-RUN echo "Listen 8080" >> /etc/apache2/ports.conf && \
-    a2enmod rewrite
+RUN mkdir -p /run/nginx
 
-# command artisan
-RUN php /var/www/artisan key:generate
+COPY docker/nginx.conf /etc/nginx/nginx.conf
 
-# laravel log permission denied fix
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap /var/www/vendor
-RUN chmod -R 775 /var/www/storage /var/www/bootstrap /var/www/vendor
+
+# Install Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Copy application files
+COPY . .
+
+# Copy environment file
+COPY .env.example .env
+
+# Install Laravel dependencies
+RUN composer install --optimize-autoloader --no-dev
+
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+CMD sh /var/www/html/docker/startup.sh
